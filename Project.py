@@ -109,6 +109,11 @@ def cleanup():
 
         oled_text("Gestopt")
 
+        mqtt_client.publish(
+            "deurbel/motor",
+            "STOP"
+        )
+
         mqtt_client.loop_stop()
 
         camera.release()
@@ -116,6 +121,18 @@ def cleanup():
     except Exception as e:
 
         print("Cleanup fout:", e)
+        
+        
+# =====================================
+# Stepper motor
+# =====================================
+
+def open_door():
+
+    mqtt_client.publish(
+        "deurbel/motor",
+        "OPEN"
+    )
 
 # =====================================
 # FACE DATABASE
@@ -124,10 +141,10 @@ def cleanup():
 known_encodings = []
 known_names = []
 
-for file in os.listdir("bekende_gezichten"):
+for file in os.listdir("pi_scripts/bekende_gezichten"):
 
     path = os.path.join(
-        "bekende_gezichten",
+        "pi_scripts/bekende_gezichten",
         file
     )
 
@@ -249,6 +266,9 @@ mqtt_client.subscribe(
     "deurbel/light"
 )
 
+mqtt_client.subscribe(
+    "deurbel/motor_feedback"
+)
 
 mqtt_client.loop_start()
 
@@ -340,6 +360,8 @@ while True:
                 )
 
                 rgb_green()
+                
+                open_door()
 
             else:
 
@@ -378,6 +400,9 @@ while True:
             print(
                 f"Foto opgeslagen: {filename}"
             )
+            
+            time.sleep(5)
+            
 
         # reset wanneer bezoeker weg is
         if distance > 70:
