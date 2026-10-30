@@ -7,22 +7,27 @@ import digitalio
 
 import adafruit_hcsr04
 import adafruit_bh1750
-import adafruit_motor.stepper
 
 from adafruit_minimqtt.adafruit_minimqtt import MQTT
 
+# =====================================
 # WIFI
+# =====================================
 
 wifi.radio.connect(
-    "Telenet-9495",
-    "Hollebollebobby27!"
+    "SSID",
+    "PWD"
 )
+
+print("Wifi verbonden")
 
 pool = socketpool.SocketPool(
     wifi.radio
 )
 
-# RGB
+# =====================================
+# RGB LED
+# =====================================
 
 red = digitalio.DigitalInOut(board.GP16)
 green = digitalio.DigitalInOut(board.GP17)
@@ -31,101 +36,181 @@ blue = digitalio.DigitalInOut(board.GP18)
 for led in [red, green, blue]:
     led.direction = digitalio.Direction.OUTPUT
 
+
+def rgb_off():
+
+    red.value = False
+    green.value = False
+    blue.value = False
+
+
+def rgb_red():
+
+    red.value = True
+    green.value = False
+    blue.value = False
+
+
+def rgb_green():
+
+    red.value = False
+    green.value = True
+    blue.value = False
+
+
+def rgb_blue():
+
+    red.value = False
+    green.value = False
+    blue.value = True
+
+
+# =====================================
+# STEPPERMOTOR
+# =====================================
+
+in1 = digitalio.DigitalInOut(board.GP2)
+in2 = digitalio.DigitalInOut(board.GP3)
+in3 = digitalio.DigitalInOut(board.GP4)
+in4 = digitalio.DigitalInOut(board.GP5)
+
+for pin in [in1, in2, in3, in4]:
+    pin.direction = digitalio.Direction.OUTPUT
+
+sequence = [
+    [1,0,0,0],
+    [1,1,0,0],
+    [0,1,0,0],
+    [0,1,1,0],
+    [0,0,1,0],
+    [0,0,1,1],
+    [0,0,0,1],
+    [1,0,0,1]
+]
+
+
+def set_step(step):
+
+    in1.value = step[0]
+    in2.value = step[1]
+    in3.value = step[2]
+    in4.value = step[3]
+
+
+def motor_off():
+
+    in1.value = False
+    in2.value = False
+    in3.value = False
+    in4.value = False
+
+
+def step_motor(steps, direction=1):
+
+    for _ in range(steps):
+
+        if direction == 1:
+            seq = sequence
+        else:
+            seq = reversed(sequence)
+
+        for step in seq:
+
+            set_step(step)
+
+            time.sleep(0.002)
+
+    motor_off()
+
+
+def open_door():
+
+    print("DEUR OPENEN")
+
+    # ongeveer 90 graden
+
+    step_motor(
+        512,
+        direction=1
+    )
+
+    time.sleep(5)
+
+    print("DEUR SLUITEN")
+
+    step_motor(
+        512,
+        direction=-1
+    )
+
+    motor_off()
+
+
+# =====================================
 # HC-SR04
+# =====================================
 
 sonar = adafruit_hcsr04.HCSR04(
     trigger_pin=board.GP15,
     echo_pin=board.GP14
 )
 
+# =====================================
 # BH1750
+# =====================================
 
 i2c = busio.I2C(
     board.GP1,
     board.GP0
 )
 
-light = adafruit_bh1750.BH1750(i2c)
-
-# Stepper motor
-
-coil_a1 = digitalio.DigitalInOut(board.GP2)
-coil_a2 = digitalio.DigitalInOut(board.GP3)
-coil_b1 = digitalio.DigitalInOut(board.GP4)
-coil_b2 = digitalio.DigitalInOut(board.GP5)
-
-motor = adafruit_motor.stepper.StepperMotor(
-    coil_a1,
-    coil_a2,
-    coil_b1,
-    coil_b2
-)
-
-def open_door():
-
-    print("Deur openen")
-
-    for _ in range(512):
-
-        motor.onestep(
-            direction=
-            adafruit_motor.stepper.FORWARD
-        )
-
-        time.sleep(0.002)
-
-    time.sleep(3)
-
-    print("Deur sluiten")
-
-    for _ in range(512):
-
-        motor.onestep(
-            direction=
-            adafruit_motor.stepper.BACKWARD
-        )
-
-        time.sleep(0.002)
-
-    motor.release()
-
-# MQTT callback
-
-def message(client, topic, payload):
-
-    print(topic, payload)
-
-    red.value = False
-    green.value = False
-    blue.value = False
-
-    if payload == "RED":
-        red.value = True
-
-    elif payload == "GREEN":
-        green.value = True
-
-    elif payload == "BLUE":
-        blue.value = True
-
-    elif payload == "OFF":
-        red.value = False
-        green.value = False
-        blue.value = False
-        open_door()
+light_sensor = adafruit_bh1750.BH1750(i2c)
 
 # =====================================
-# OPEN DOOR FUNCTION
-# =====================================       
+# MQTT CALLBACK
+# =====================================
+
+def mqtt_message(
+    client,
+    topic,
+    payload
+):
+
+    print(
+        f"RX -> {topic}: {payload}"
+    )
+
+    if topic == "deurbel/status":
+
+        if payload == "RED":
+            rgb_red()
+
+        elif payload == "GREEN":
+            rgb_green()
+
+        elif payload == "BLUE":
+            rgb_blue()
+
+        elif payload == "OFF":
+            rgb_off()
+
+    elif topic == "deurbel/motor":
+
+        if payload == "OPEN":
+
+            open_door()
 
 
+# =====================================
+# MQTT CLIENT
+# =====================================
 
 mqtt = MQTT(
     broker="broker.hivemq.com",
     socket_pool=pool
 )
 
-mqtt.on_message = message
+mqtt.on_message = mqtt_message
 
 mqtt.connect()
 
@@ -133,31 +218,62 @@ mqtt.subscribe(
     "deurbel/status"
 )
 
-print("MQTT OK")
+mqtt.subscribe(
+    "deurbel/motor"
+)
+
+print("MQTT verbonden")
+
+# =====================================
+# STARTUP
+# =====================================
+
+rgb_blue()
 
 last_publish = 0
 
+# =====================================
+# HOOFDLUS
+# =====================================
+
 while True:
 
-    mqtt.loop()
+    try:
 
-    if time.monotonic() - last_publish > 2:
+        mqtt.loop()
 
-        try:
+        if time.monotonic() - last_publish > 2:
 
-            distance = sonar.distance
+            try:
 
-            mqtt.publish(
-                "deurbel/distance",
-                str(distance)
-            )
+                distance = sonar.distance
 
-            mqtt.publish(
-                "deurbel/light",
-                str(light.lux)
-            )
+                mqtt.publish(
+                    "deurbel/distance",
+                    f"{distance:.1f}"
+                )
 
-        except RuntimeError:
-            pass
+                lux = light_sensor.lux
 
-        last_publish = time.monotonic()
+                mqtt.publish(
+                    "deurbel/light",
+                    f"{lux:.1f}"
+                )
+
+                print(
+                    f"Afstand: {distance:.1f} cm | Lux: {lux:.1f}"
+                )
+
+            except RuntimeError:
+                pass
+
+            last_publish = time.monotonic()
+
+        time.sleep(0.1)
+
+    except Exception as e:
+
+        print("Fout:", e)
+
+        time.sleep(1)
+
