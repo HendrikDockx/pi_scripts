@@ -7,6 +7,7 @@ import digitalio
 
 import adafruit_hcsr04
 import adafruit_bh1750
+import adafruit_motor.stepper
 
 from adafruit_minimqtt.adafruit_minimqtt import MQTT
 
@@ -46,6 +47,48 @@ i2c = busio.I2C(
 
 light = adafruit_bh1750.BH1750(i2c)
 
+# Stepper motor
+
+coil_a1 = digitalio.DigitalInOut(board.GP2)
+coil_a2 = digitalio.DigitalInOut(board.GP3)
+coil_b1 = digitalio.DigitalInOut(board.GP4)
+coil_b2 = digitalio.DigitalInOut(board.GP5)
+
+motor = adafruit_motor.stepper.StepperMotor(
+    coil_a1,
+    coil_a2,
+    coil_b1,
+    coil_b2
+)
+
+def open_door():
+
+    print("Deur openen")
+
+    for _ in range(512):
+
+        motor.onestep(
+            direction=
+            adafruit_motor.stepper.FORWARD
+        )
+
+        time.sleep(0.002)
+
+    time.sleep(3)
+
+    print("Deur sluiten")
+
+    for _ in range(512):
+
+        motor.onestep(
+            direction=
+            adafruit_motor.stepper.BACKWARD
+        )
+
+        time.sleep(0.002)
+
+    motor.release()
+
 # MQTT callback
 
 def message(client, topic, payload):
@@ -69,6 +112,13 @@ def message(client, topic, payload):
         red.value = False
         green.value = False
         blue.value = False
+        open_door()
+
+# =====================================
+# OPEN DOOR FUNCTION
+# =====================================       
+
+
 
 mqtt = MQTT(
     broker="broker.hivemq.com",
